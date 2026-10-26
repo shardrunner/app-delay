@@ -27,6 +27,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Select isolated AVD directory
+        run: echo "ANDROID_AVD_HOME=$RUNNER_TEMP/persistence-avds" >> "$GITHUB_ENV"
       - name: Install Java 17 toolchain
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:
@@ -48,16 +50,7 @@ jobs:
           mkdir -p ci-diagnostics
           sudo chmod a+rw /dev/kvm
           "$ANDROID_HOME/emulator/emulator" -accel-check
-          echo no | avdmanager create avd --name persistence-api36 --package 'system-images;android-36;google_apis;x86_64'
-          nohup "$ANDROID_HOME/emulator/emulator" @persistence-api36 \
-            -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot \
-            -gpu swiftshader_indirect > ci-diagnostics/emulator.log 2>&1 &
-          timeout 360 bash -euo pipefail -c '
-            adb -s "$ANDROID_SERIAL" wait-for-device
-            until [[ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed | tr -d "\r")" == 1 ]]; do
-              sleep 2
-            done
-          '
+          bash scripts/boot-ci-emulator.sh
           adb devices -l | tee ci-diagnostics/devices.txt
           test "$(adb devices | awk 'NR > 1 && NF { print $1 " " $2 }')" = "$ANDROID_SERIAL device"
           test "$(adb -s "$ANDROID_SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')" = 36
@@ -127,6 +120,8 @@ jobs:
         with:
           cmdline-tools-version: '13114758'
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - name: CI emulator startup regression tests
+        run: python3 -m unittest discover -s scripts/tests -v
       - name: Unit tests, static checks and compilation
         run: >-
           ./gradlew --no-daemon --stacktrace --continue

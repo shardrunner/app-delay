@@ -21,6 +21,9 @@ out/
 .DS_Store
 Thumbs.db
 
+# Python CI regression tests
+__pycache__/
+
 # Logs / temp
 *.log
 *.tmp

@@ -101,6 +101,18 @@ The suite does not exercise the accessibility service end to end; enforcement re
 
 A separate `persistence` job boots a fresh API 36 Google APIs x86_64 emulator on a hosted Ubuntu runner, selects only `emulator-5554`, and checks boot completion, API level and device isolation before installation. It uses the same Java/SDK setup and unchanged APK-retention settings. Installation failures stop test execution; an always-run retention check follows any installation attempt. Connected reports/results and emulator diagnostics are uploaded even on failure.
 
+AVD creation and emulator launch share an explicit `ANDROID_AVD_HOME` under the runner's
+temporary directory. `scripts/boot-ci-emulator.sh` verifies the definition file and native
+emulator discovery before launch, then monitors process liveness while polling boot completion
+with bounded ADB probes. An exited emulator fails startup with its log instead of waiting for
+the six-minute boot deadline. Diagnostics include the shared directory, creation output, AVD
+listing and emulator log. Startup regression tests use fake SDK tools and do not access devices;
+CI runs them in `verify`, and they can be run locally with:
+
+```bash
+python3 -m unittest discover -s scripts/tests -v
+```
+
 The job runs only this persistence allowlist (not enforcement/navigation or permission-changing tests):
 
 ```bash
