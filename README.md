@@ -16,7 +16,7 @@ A personal Android tool for adding a deliberate pause before distracting apps—
 
 ## Try it
 
-[Installation and setup](docs/public/install.md) explains evaluation APKs, sideloading, permissions and a first profile. After CI is enabled and a run succeeds, its `evaluation-debug-apk` artifact is the evaluation download path. This is a **debug build**, not a signed stable release. No published stable release is claimed here.
+[Installation and setup](docs/public/install.md) explains evaluation APKs, sideloading, permissions and a first profile. The `evaluation-debug-apk` artifact from a successful CI run is the evaluation download path. This is a **debug build**, not a signed stable release. No published stable release is claimed here.
 
 For source builds, use [Build, tests and releases](docs/public/development.md).
 
