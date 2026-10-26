@@ -1,0 +1,153 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  persistence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      ANDROID_SERIAL: emulator-5554
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install Java 17 toolchain
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17.0.18+8'
+      - name: Install Gradle runtime Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '25.0.2+10.0.LTS'
+      - name: Set up Android SDK and API 36 image
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          cmdline-tools-version: '13114758'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 emulator system-images;android-36;google_apis;x86_64'
+      - name: Boot isolated API 36 emulator
+        timeout-minutes: 8
+        run: |
+          mkdir -p ci-diagnostics
+          sudo chmod a+rw /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -accel-check
+          echo no | avdmanager create avd --name persistence-api36 --package 'system-images;android-36;google_apis;x86_64'
+          nohup "$ANDROID_HOME/emulator/emulator" @persistence-api36 \
+            -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot \
+            -gpu swiftshader_indirect > ci-diagnostics/emulator.log 2>&1 &
+          timeout 360 bash -euo pipefail -c '
+            adb -s "$ANDROID_SERIAL" wait-for-device
+            until [[ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed | tr -d "\r")" == 1 ]]; do
+              sleep 2
+            done
+          '
+          adb devices -l | tee ci-diagnostics/devices.txt
+          test "$(adb devices | awk 'NR > 1 && NF { print $1 " " $2 }')" = "$ANDROID_SERIAL device"
+          test "$(adb -s "$ANDROID_SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')" = 36
+      # Installing separately makes retention checkable even if instrumentation fails.
+      - name: Install app on isolated emulator
+        id: install
+        run: >-
+          ./gradlew --no-daemon --stacktrace
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_25_X64
+          :app:installDebug
+      - name: Persistence-only instrumentation
+        run: >-
+          ./gradlew --no-daemon --stacktrace
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_25_X64
+          -Pandroid.testInstrumentationRunnerArguments.class=com.androidpause.ProfileStoreInstrumentedTest,com.androidpause.ProfileViewModelInstrumentedTest,com.androidpause.SettingsBackupInstrumentedTest,com.androidpause.BackupPersistenceInstrumentedTest
+          :app:connectedDebugAndroidTest
+      - name: Verify app remains installed
+        if: always() && steps.install.outcome != 'skipped'
+        timeout-minutes: 2
+        run: |
+          mkdir -p ci-diagnostics
+          adb -s "$ANDROID_SERIAL" shell pm path com.androidpause | tee ci-diagnostics/app-retention.txt
+          grep -q '^package:' ci-diagnostics/app-retention.txt
+      - name: Collect emulator diagnostics
+        if: always()
+        timeout-minutes: 2
+        run: |
+          mkdir -p ci-diagnostics
+          if ! command -v adb > /dev/null 2>&1; then
+            echo 'Skipping emulator diagnostics: adb is unavailable; SDK setup did not complete.' | tee ci-diagnostics/diagnostics-skipped.txt
+            exit 0
+          fi
+          adb devices -l > ci-diagnostics/devices-final.txt
+          timeout 30 adb -s "$ANDROID_SERIAL" logcat -d -t 2000 > ci-diagnostics/logcat.txt 2>&1 || true
+      - name: Upload persistence reports and diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: persistence-api36-reports
+          path: |
+            app/build/reports/androidTests/connected/
+            app/build/outputs/androidTest-results/connected/
+            ci-diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
+
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      # Install the compilation toolchain first; the second setup selects the runtime.
+      - name: Install Java 17 toolchain
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17.0.18+8'
+      - name: Install Gradle runtime Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '25.0.2+10.0.LTS'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          cmdline-tools-version: '13114758'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - name: Unit tests, static checks and compilation
+        run: >-
+          ./gradlew --no-daemon --stacktrace --continue
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_25_X64
+          :app:testDebugUnitTest :app:lintDebug ktlintCheck detekt
+          :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest
+      - name: Upload verification reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: verification-reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+            build/reports/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload evaluation APK (debug, not stable)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: evaluation-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">App Delay</string>
+    <string name="accessibility_service_label">App Delay</string>
+    <string name="accessibility_service_description">Uses foreground package information to show pauses for covered apps. Accessibility grants sensitive access, including window content; App Delay is not designed to record messages or screen contents. No account, analytics or app-operated backend. Android backup and device transfer may include configuration and usage.</string>
+</resources>

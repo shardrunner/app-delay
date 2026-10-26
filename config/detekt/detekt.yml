@@ -1,0 +1,10 @@
+style:
+  ReturnCount:
+    active: true
+    max: 6
+
+naming:
+  FunctionNaming:
+    active: true
+    ignoreAnnotated:
+      - Composable

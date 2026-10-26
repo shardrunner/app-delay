@@ -1,0 +1,16 @@
+{
+  "formatVersion": 1,
+  "profiles": [{
+    "name": " Focus ",
+    "packages": [" org.example.reader ", "org.example.reader"],
+    "rules": [{
+      "name": " Daily ",
+      "windowStart": "00:00",
+      "windowEnd": "00:00",
+      "timeBudgetSeconds": 600,
+      "pauseDelaySeconds": 5,
+      "afterPauseBudgetSeconds": 60,
+      "message": "  Preserve this text.  "
+    }]
+  }]
+}

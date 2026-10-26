@@ -1,0 +1,28 @@
+{
+  "formatVersion": 1,
+  "preferences": { "warningsEnabled": true },
+  "profiles": [{
+    "name": "Daily focus",
+    "enabled": true,
+    "packages": ["org.example.reader", "org.example.unavailable"],
+    "rules": [{
+      "name": "Daily allowance",
+      "windowStart": "00:00",
+      "windowEnd": "00:00",
+      "timeBudgetSeconds": 600,
+      "openingAllowance": 3,
+      "pauseDelaySeconds": 5,
+      "afterPauseBudgetSeconds": 60,
+      "message": "Take a break.\nChoose deliberately."
+    }, {
+      "name": "Evening openings",
+      "windowStart": "18:00",
+      "windowEnd": "23:00",
+      "timeBudgetSeconds": null,
+      "openingAllowance": 2,
+      "pauseDelaySeconds": null,
+      "afterPauseBudgetSeconds": 0,
+      "message": "Done for today."
+    }]
+  }]
+}
